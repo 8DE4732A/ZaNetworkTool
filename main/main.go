@@ -8,12 +8,12 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage:\n -conn <interface> <username> <password> \n -dev")
+		fmt.Println("Usage:\n -conn <interface> <username> <password> \n -interface")
 	} else {
 		if os.Args[1] == "-conn" && len(os.Args) < 4 {
 			fmt.Println("Usage:\n -conn <interface> <username> <password>")
 			return
-		} else if os.Args[1] == "-dev" {
+		} else if os.Args[1] == "-interface" {
 			fmt.Println(dev())
 			return
 		}
@@ -31,4 +31,8 @@ func dev() []string {
 		result = append(result, intf.Name)
 	}
 	return result
+}
+
+func authentication() {
+
 }
