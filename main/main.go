@@ -61,9 +61,11 @@ func authentication(interfaceName string, localMac string) {
 	username := string(data[0:index])
 	passwd := data[index+1:]
 
+	fmt.Printf("username: %x", username)
+	fmt.Printf("password %x", passwd)
+
 	stop := make(chan int)
 	defer close(stop)
-	time.Sleep(3000)
 
 	go broadcast(handle, hwAddr, stop)
 
@@ -126,14 +128,11 @@ func broadcast(handle *pcap.Handle, localMac net.HardwareAddr, stop chan int) er
 	}
 
 	buf := gopacket.NewSerializeBuffer()
-	opts := gopacket.SerializeOptions{
-		FixLengths:       true,
-		ComputeChecksums: true,
-	}
+	opts := gopacket.SerializeOptions{}
 	gopacket.SerializeLayers(buf, opts, &eth, &eaPol)
 	fmt.Println("broadcast %x", buf.Bytes)
+	time.Sleep(time.Duration(3 * time.Second))
 	for {
-		time.Sleep(time.Duration(3 * time.Second))
 		select {
 		case _ = <-stop:
 			fmt.Println("success! stop boardcast")
@@ -143,6 +142,7 @@ func broadcast(handle *pcap.Handle, localMac net.HardwareAddr, stop chan int) er
 				fmt.Println("send boardcast failed.", err)
 			}
 		}
+		time.Sleep(time.Duration(20 * time.Second))
 	}
 	return nil
 }
@@ -153,10 +153,15 @@ func sendUserName(handle *pcap.Handle, srcMac net.HardwareAddr, destAddr net.Har
 		DstMAC:       destAddr,
 		EthernetType: 0x888e,
 	}
+	eapol := layers.EAPOL{
+		Version: 0x01,
+		Type:    layers.EAPOLTypeEAP,
+		Length:  202,
+	}
 	eap := layers.EAP{
 		Code:     layers.EAPCodeResponse,
 		Id:       id,
-		Length:   uint16(len([]byte(username))),
+		Length:   202,
 		Type:     layers.EAPTypeIdentity,
 		TypeData: []byte(username),
 	}
@@ -166,7 +171,7 @@ func sendUserName(handle *pcap.Handle, srcMac net.HardwareAddr, destAddr net.Har
 		FixLengths:       true,
 		ComputeChecksums: true,
 	}
-	gopacket.SerializeLayers(buf, opts, &eth, &eap)
+	gopacket.SerializeLayers(buf, opts, &eth, &eapol, &eap)
 	fmt.Println("send username ", username)
 	if err := handle.WritePacketData(buf.Bytes()); err != nil {
 		return err
@@ -181,12 +186,16 @@ func sendPassword(handle *pcap.Handle, srcMac net.HardwareAddr, destAddr net.Har
 		DstMAC:       destAddr,
 		EthernetType: 0x888e,
 	}
-
+	eapol := layers.EAPOL{
+		Version: 0x01,
+		Type:    layers.EAPOLTypeEAP,
+		Length:  147,
+	}
 	eap := layers.EAP{
 		Code:     layers.EAPCodeResponse,
 		Id:       id,
-		Length:   uint16(len(password)),
-		Type:     layers.EAPTypeIdentity,
+		Length:   147,
+		Type:     0x66,
 		TypeData: password,
 	}
 
@@ -195,7 +204,7 @@ func sendPassword(handle *pcap.Handle, srcMac net.HardwareAddr, destAddr net.Har
 		FixLengths:       true,
 		ComputeChecksums: true,
 	}
-	gopacket.SerializeLayers(buf, opts, &eth, &eap)
+	gopacket.SerializeLayers(buf, opts, &eth, &eapol, &eap)
 	if err := handle.WritePacketData(buf.Bytes()); err != nil {
 		return err
 	}
