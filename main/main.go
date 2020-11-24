@@ -3,13 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"net"
+	"time"
+
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
-	"io/ioutil"
-	"net"
-	"sync"
-	"time"
 )
 
 var (
@@ -43,7 +43,6 @@ func authentication(interfaceName string, localMac string) {
 	}
 	defer handle.Close()
 
-	stop := make(chan int)
 	hwAddr, err := net.ParseMAC(localMac)
 	if err != nil {
 		panic(err)
@@ -62,15 +61,13 @@ func authentication(interfaceName string, localMac string) {
 	username := string(data[0:index])
 	passwd := data[index+1:]
 
-	go readEap(handle, hwAddr, stop, username, passwd)
+	stop := make(chan int)
 	defer close(stop)
-
 	time.Sleep(3000)
-	go broadcast(handle, hwAddr)
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	wg.Wait()
+	go broadcast(handle, hwAddr, stop)
+
+	readEap(handle, hwAddr, stop, username, passwd)
 }
 
 func readEap(handle *pcap.Handle, localMac net.HardwareAddr, stop chan int, username string, password []byte) {
@@ -79,8 +76,6 @@ func readEap(handle *pcap.Handle, localMac net.HardwareAddr, stop chan int, user
 	for {
 		var packet gopacket.Packet
 		select {
-		case <-stop:
-			return
 		case packet = <-in:
 			ethLayer := packet.Layer(layers.LayerTypeEthernet)
 			if ethLayer == nil {
@@ -118,7 +113,7 @@ func readEap(handle *pcap.Handle, localMac net.HardwareAddr, stop chan int, user
 	}
 }
 
-func broadcast(handle *pcap.Handle, localMac net.HardwareAddr) error {
+func broadcast(handle *pcap.Handle, localMac net.HardwareAddr, stop chan int) error {
 	eth := layers.Ethernet{
 		SrcMAC:       localMac,
 		DstMAC:       net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
@@ -136,9 +131,18 @@ func broadcast(handle *pcap.Handle, localMac net.HardwareAddr) error {
 		ComputeChecksums: true,
 	}
 	gopacket.SerializeLayers(buf, opts, &eth, &eaPol)
-	fmt.Println("broadcast ")
-	if err := handle.WritePacketData(buf.Bytes()); err != nil {
-		return err
+	fmt.Println("broadcast %x", buf.Bytes)
+	for {
+		time.Sleep(time.Duration(3 * time.Second))
+		select {
+		case _ = <-stop:
+			fmt.Println("success! stop boardcast")
+			return nil
+		default:
+			if err := handle.WritePacketData(buf.Bytes()); err != nil {
+				fmt.Println("send boardcast failed.", err)
+			}
+		}
 	}
 	return nil
 }
