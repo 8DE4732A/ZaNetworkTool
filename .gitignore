@@ -1,0 +1,17 @@
+# Binaries
+/mirror
+/device
+/hack
+/auth
+*.exe
+
+# Credentials
+password.bin
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# macOS
+.DS_Store
